@@ -1,0 +1,213 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────
+
+enum Discipline {
+  OT
+  PT
+  SLP
+  MSW
+  COTA
+  PTA
+}
+
+enum ClinicianStatus {
+  ONBOARDING
+  CREDENTIALING
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum ReferralStatus {
+  NEW
+  MATCHING
+  OFFER_SENT
+  ASSIGNED
+  VISIT_COMPLETED
+  DOCUMENTATION_RECEIVED
+  READY_FOR_BILLING
+  CLOSED
+  CANCELLED
+  UNFILLED
+}
+
+enum OfferStatus {
+  PENDING
+  SENT
+  YES_RECEIVED
+  NO_RECEIVED
+  WON
+  LOST_FILLED
+  EXPIRED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+// ─── Models ──────────────────────────────────────────────
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String
+  hashedPassword String
+  role           String   @default("scheduler")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Agency {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  city      String?
+  state     String?
+  zipCode   String?
+  isActive  Boolean  @default(true)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  referrals Referral[]
+
+  @@map("agencies")
+}
+
+model Clinician {
+  id          String          @id @default(cuid())
+  firstName   String
+  lastName    String
+  email       String?         @unique
+  phone       String          @unique
+  discipline  Discipline
+  status      ClinicianStatus @default(ONBOARDING)
+  notes       String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  zipCoverages    ZipCoverage[]
+  credentials     Credential[]
+  broadcastOffers BroadcastOffer[]
+  assignments     Assignment[]
+
+  @@map("clinicians")
+}
+
+model ZipCoverage {
+  id          String @id @default(cuid())
+  clinicianId String
+  zipCode     String
+
+  clinician Clinician @relation(fields: [clinicianId], references: [id], onDelete: Cascade)
+
+  @@unique([clinicianId, zipCode])
+  @@index([zipCode])
+  @@map("zip_coverages")
+}
+
+model Credential {
+  id          String    @id @default(cuid())
+  clinicianId String
+  name        String
+  issuedAt    DateTime?
+  expiresAt   DateTime?
+  isVerified  Boolean   @default(false)
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  clinician Clinician @relation(fields: [clinicianId], references: [id], onDelete: Cascade)
+
+  @@map("credentials")
+}
+
+model Referral {
+  id             String         @id @default(cuid())
+  patientName    String
+  patientPhone   String?
+  patientAddress String?
+  patientCity    String?
+  patientState   String?
+  patientZipCode String
+  discipline     Discipline
+  status         ReferralStatus @default(NEW)
+  priority       String         @default("normal")
+  notes          String?
+  agencyId       String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  agency          Agency           @relation(fields: [agencyId], references: [id])
+  broadcastOffers BroadcastOffer[]
+  assignment      Assignment?
+
+  @@index([status])
+  @@index([patientZipCode])
+  @@index([discipline])
+  @@map("referrals")
+}
+
+model BroadcastOffer {
+  id          String      @id @default(cuid())
+  referralId  String
+  clinicianId String
+  status      OfferStatus @default(PENDING)
+  sentAt      DateTime?
+  respondedAt DateTime?
+  twilioSid   String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  referral  Referral  @relation(fields: [referralId], references: [id])
+  clinician Clinician @relation(fields: [clinicianId], references: [id])
+
+  @@unique([referralId, clinicianId])
+  @@index([referralId])
+  @@index([clinicianId])
+  @@index([status])
+  @@map("broadcast_offers")
+}
+
+model Assignment {
+  id          String   @id @default(cuid())
+  referralId  String   @unique
+  clinicianId String
+  assignedAt  DateTime @default(now())
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  referral  Referral  @relation(fields: [referralId], references: [id])
+  clinician Clinician @relation(fields: [clinicianId], references: [id])
+
+  @@map("assignments")
+}
+
+model CommunicationLog {
+  id          String           @id @default(cuid())
+  phone       String
+  message     String
+  direction   MessageDirection
+  twilioSid   String?
+  referralId  String?
+  clinicianId String?
+  createdAt   DateTime         @default(now())
+
+  @@index([phone])
+  @@index([referralId])
+  @@index([clinicianId])
+  @@map("communication_logs")
+}
