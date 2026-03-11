@@ -68,6 +68,9 @@ export async function POST(request: Request) {
       );
     }
 
+    // Normalize ZIP to 5 digits (strip ZIP+4 like "77459-1107" → "77459")
+    const normalizedZip = patientZipCode.split("-")[0].trim().slice(0, 5);
+
     const referral = await prisma.referral.create({
       data: {
         patientName,
@@ -75,7 +78,7 @@ export async function POST(request: Request) {
         patientAddress,
         patientCity,
         patientState,
-        patientZipCode,
+        patientZipCode: normalizedZip,
         discipline,
         priority,
         notes,
@@ -89,7 +92,7 @@ export async function POST(request: Request) {
     // Auto-match and broadcast
     const matches = await findEligibleClinicians(
       discipline as Discipline,
-      patientZipCode
+      normalizedZip
     );
 
     if (matches.length > 0) {

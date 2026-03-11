@@ -7,12 +7,15 @@ export async function findEligibleClinicians(
 ) {
   const now = new Date();
 
+  // Normalize ZIP to 5 digits (strip ZIP+4 like "77459-1107" → "77459")
+  const normalizedZip = zipCode.split("-")[0].trim().slice(0, 5);
+
   const clinicians = await prisma.clinician.findMany({
     where: {
       discipline,
       status: "ACTIVE",
       zipCoverages: {
-        some: { zipCode },
+        some: { zipCode: normalizedZip },
       },
       // No expired credentials
       credentials: {
