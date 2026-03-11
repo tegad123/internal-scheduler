@@ -65,9 +65,15 @@ export default function NewReferralPage() {
         const err = await res.json();
         throw new Error(err.error || "Failed to create referral");
       }
-      const referral = await res.json();
-      toast.success("Referral created");
-      router.push(`/referrals/${referral.id}`);
+      const data = await res.json();
+      if (data.broadcast) {
+        toast.success(
+          `Referral created — offers sent to ${data.broadcast.sentCount} clinician${data.broadcast.sentCount === 1 ? "" : "s"}`
+        );
+      } else {
+        toast.warning("Referral created — no matching clinicians found");
+      }
+      router.push(`/referrals/${data.referral.id}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create referral");
     } finally {
@@ -215,7 +221,7 @@ export default function NewReferralPage() {
 
             <div className="flex gap-3">
               <Button type="submit" disabled={submitting}>
-                {submitting ? "Creating..." : "Create Referral"}
+                {submitting ? "Creating & Broadcasting..." : "Create Referral"}
               </Button>
               <Button
                 type="button"

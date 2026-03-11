@@ -1,6 +1,5 @@
 import { prisma } from "../db";
-import { sendSMS, formatOfferMessage } from "../twilio";
-import { Discipline } from "@prisma/client";
+import { sendSMS, formatOfferMessage, formatPatientAddress } from "../twilio";
 
 interface BroadcastResult {
   totalOffers: number;
@@ -15,6 +14,7 @@ export async function broadcastOffers(
 ): Promise<BroadcastResult> {
   const referral = await prisma.referral.findUnique({
     where: { id: referralId },
+    include: { agency: true },
   });
 
   if (!referral) throw new Error("Referral not found");
@@ -53,16 +53,17 @@ export async function broadcastOffers(
     errors: [],
   };
 
-  const shortId = referralId.slice(-6).toUpperCase();
+  const patientAddress = formatPatientAddress(referral);
 
   await Promise.allSettled(
     offers.map(async (offer) => {
       try {
-        const message = formatOfferMessage(
-          referral.discipline,
-          referral.patientZipCode,
-          shortId
-        );
+        const message = formatOfferMessage({
+          clinicianFirstName: offer.clinician.firstName,
+          agencyName: referral.agency.name,
+          discipline: referral.discipline,
+          patientAddress,
+        });
         const smsResult = await sendSMS(offer.clinician.phone, message);
 
         await prisma.broadcastOffer.update({

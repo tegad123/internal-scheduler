@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { Discipline, ReferralStatus } from "@prisma/client";
+import { findEligibleClinicians } from "@/lib/services/matching";
+import { broadcastOffers } from "@/lib/services/broadcast";
 
 export async function GET(request: Request) {
   try {
@@ -84,7 +86,41 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json(referral, { status: 201 });
+    // Auto-match and broadcast
+    const matches = await findEligibleClinicians(
+      discipline as Discipline,
+      patientZipCode
+    );
+
+    if (matches.length > 0) {
+      const clinicianIds = matches.map((c) => c.id);
+      const broadcastResult = await broadcastOffers(referral.id, clinicianIds);
+
+      return NextResponse.json(
+        {
+          referral,
+          broadcast: broadcastResult,
+        },
+        { status: 201 }
+      );
+    }
+
+    // No matches — mark as unfilled
+    const updatedReferral = await prisma.referral.update({
+      where: { id: referral.id },
+      data: { status: "UNFILLED" },
+      include: { agency: true },
+    });
+
+    return NextResponse.json(
+      {
+        referral: updatedReferral,
+        broadcast: null,
+        message:
+          "No eligible clinicians found for this discipline and ZIP code",
+      },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Failed to create referral:", error);
     return NextResponse.json(

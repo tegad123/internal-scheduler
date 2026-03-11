@@ -1,5 +1,13 @@
 import { prisma } from "../db";
-import { sendSMS, formatAssignmentConfirmation, formatFilledMessage, formatNoAcknowledgment } from "../twilio";
+import {
+  sendSMS,
+  formatAssignmentConfirmation,
+  formatFilledMessage,
+  formatNoAcknowledgment,
+  formatPatientAddress,
+  abbreviatePatientName,
+} from "../twilio";
+import { sendEmail, formatAssignmentEmail } from "../email";
 
 interface ClaimResult {
   success: boolean;
@@ -95,7 +103,10 @@ export async function handleYesResponse(
       status: "SENT",
     },
     orderBy: { sentAt: "desc" },
-    include: { referral: true, clinician: true },
+    include: {
+      referral: { include: { agency: true } },
+      clinician: true,
+    },
   });
 
   if (!offer) {
@@ -103,13 +114,16 @@ export async function handleYesResponse(
   }
 
   const result = await claimReferral(offer.id, clinicianId);
+  const patientAddress = formatPatientAddress(offer.referral);
 
   if (result.success) {
     // Send confirmation to winner
-    const confirmMsg = formatAssignmentConfirmation(
-      offer.referral.discipline,
-      offer.referral.patientZipCode
-    );
+    const supportPhone = process.env.SUPPORT_PHONE || "";
+    const confirmMsg = formatAssignmentConfirmation({
+      patientNameAbbreviated: abbreviatePatientName(offer.referral.patientName),
+      patientAddress,
+      supportPhone,
+    });
     try {
       const sms = await sendSMS(phone, confirmMsg);
       await prisma.communicationLog.create({
@@ -125,9 +139,32 @@ export async function handleYesResponse(
     } catch {
       // Log failure but don't roll back assignment
     }
+
+    // Send admin email notification
+    try {
+      const adminEmail = process.env.ADMIN_EMAIL;
+      if (adminEmail) {
+        const clinicianName = `${offer.clinician.firstName} ${offer.clinician.lastName}`;
+        const emailData = formatAssignmentEmail({
+          clinicianName,
+          patientName: offer.referral.patientName,
+          patientAddress,
+        });
+        await sendEmail({
+          to: adminEmail,
+          subject: emailData.subject,
+          text: emailData.text,
+        });
+      }
+    } catch {
+      // Email failure should not affect the assignment
+    }
   } else if (result.alreadyFilled) {
     // Send "filled" message
-    const filledMsg = formatFilledMessage();
+    const filledMsg = formatFilledMessage({
+      clinicianFirstName: offer.clinician.firstName,
+      patientName: offer.referral.patientName,
+    });
     try {
       const sms = await sendSMS(phone, filledMsg);
       await prisma.communicationLog.create({

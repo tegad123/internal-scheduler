@@ -21,23 +21,59 @@ export async function sendSMS(to: string, body: string) {
   return message;
 }
 
-export function formatOfferMessage(
-  discipline: string,
-  zipCode: string,
-  caseId: string
-) {
-  return `HCT Case Offer: ${discipline} in ${zipCode}. Reply YES to accept or NO to decline. Case #${caseId}`;
+// ─── Helpers ─────────────────────────────────────────────
+
+export function formatPatientAddress(referral: {
+  patientAddress?: string | null;
+  patientCity?: string | null;
+  patientState?: string | null;
+  patientZipCode: string;
+}): string {
+  const parts = [
+    referral.patientAddress,
+    referral.patientCity,
+    referral.patientState,
+    referral.patientZipCode,
+  ].filter(Boolean);
+  return parts.join(", ");
 }
 
-export function formatAssignmentConfirmation(
-  discipline: string,
-  zipCode: string
-) {
-  return `You have been assigned the ${discipline} case in ${zipCode}. Our team will follow up with details shortly.`;
+export function abbreviatePatientName(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length < 2) return fullName;
+  return `${parts[0][0]}. ${parts.slice(1).join(" ")}`;
 }
 
-export function formatFilledMessage() {
-  return "Thank you, this spot has already been filled.";
+// ─── Message Templates ──────────────────────────────────
+
+interface OfferMessageData {
+  clinicianFirstName: string;
+  agencyName: string;
+  discipline: string;
+  patientAddress: string;
+}
+
+export function formatOfferMessage(data: OfferMessageData) {
+  return `Hello ${data.clinicianFirstName}, ${data.agencyName} needs a ${data.discipline}-Eval & Treat to be done at ${data.patientAddress}. Evals w/in 48 hours. Pls confirm your availability: respond YES to accept, or NO to reject. Thank you.`;
+}
+
+interface AssignmentConfirmationData {
+  patientNameAbbreviated: string;
+  patientAddress: string;
+  supportPhone: string;
+}
+
+export function formatAssignmentConfirmation(data: AssignmentConfirmationData) {
+  return `You have successfully been assigned HCT Patient: ${data.patientNameAbbreviated} at ${data.patientAddress}. Therapist - you MUST contact schedule patient evaluation within 3 hours of this message. Eval MUST be completed within 48 hrs. Note must be submitted in EMR within 24 hours of visit. For issues, contact ${data.supportPhone} for scheduling assistance. Please complete COVID-19 screen before visiting. Thx, HCT.`;
+}
+
+interface FilledMessageData {
+  clinicianFirstName: string;
+  patientName: string;
+}
+
+export function formatFilledMessage(data: FilledMessageData) {
+  return `Hi ${data.clinicianFirstName}, ${data.patientName} has already been assigned. Thank you for your response.`;
 }
 
 export function formatNoAcknowledgment() {
