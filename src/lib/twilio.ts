@@ -13,10 +13,19 @@ function getClient() {
 
 export async function sendSMS(to: string, body: string) {
   const client = getClient();
+
+  // Test mode: route all SMS to a single test phone number
+  const testPhone = process.env.TEST_PHONE;
+  const destination = testPhone
+    ? testPhone.startsWith("+")
+      ? testPhone
+      : `+1${testPhone}`
+    : to;
+
   const message = await client.messages.create({
     body,
     from: fromNumber,
-    to,
+    to: destination,
   });
   return message;
 }

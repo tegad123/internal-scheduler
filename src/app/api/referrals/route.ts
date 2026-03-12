@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { Discipline, ReferralStatus } from "@prisma/client";
-import { findEligibleClinicians } from "@/lib/services/matching";
 import { broadcastOffers } from "@/lib/services/broadcast";
 
 export async function GET(request: Request) {
@@ -89,14 +88,17 @@ export async function POST(request: Request) {
       },
     });
 
-    // Auto-match and broadcast
-    const matches = await findEligibleClinicians(
-      discipline as Discipline,
-      normalizedZip
-    );
+    // Broadcast to ALL active clinicians (regardless of discipline or ZIP)
+    const activeClinicians = await prisma.clinician.findMany({
+      where: {
+        status: "ACTIVE",
+        phone: { not: "" },
+      },
+      select: { id: true },
+    });
 
-    if (matches.length > 0) {
-      const clinicianIds = matches.map((c) => c.id);
+    if (activeClinicians.length > 0) {
+      const clinicianIds = activeClinicians.map((c) => c.id);
       const broadcastResult = await broadcastOffers(referral.id, clinicianIds);
 
       return NextResponse.json(
@@ -108,7 +110,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // No matches — mark as unfilled
+    // No active clinicians — mark as unfilled
     const updatedReferral = await prisma.referral.update({
       where: { id: referral.id },
       data: { status: "UNFILLED" },
@@ -119,8 +121,7 @@ export async function POST(request: Request) {
       {
         referral: updatedReferral,
         broadcast: null,
-        message:
-          "No eligible clinicians found for this discipline and ZIP code",
+        message: "No active clinicians found",
       },
       { status: 201 }
     );
