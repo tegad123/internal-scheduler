@@ -54,6 +54,8 @@ export async function broadcastOffers(
   };
 
   const patientAddress = formatPatientAddress(referral);
+  const testPhone = process.env.TEST_PHONE;
+  let testSmsSent = false;
 
   await Promise.allSettled(
     offers.map(async (offer) => {
@@ -64,7 +66,19 @@ export async function broadcastOffers(
           discipline: referral.discipline,
           patientAddress,
         });
+
+        // In test mode: only send 1 actual SMS, mark the rest as SENT without calling Twilio
+        if (testPhone && testSmsSent) {
+          await prisma.broadcastOffer.update({
+            where: { id: offer.id },
+            data: { status: "SENT", sentAt: new Date() },
+          });
+          result.sentCount++;
+          return;
+        }
+
         const smsResult = await sendSMS(offer.clinician.phone, message);
+        if (testPhone) testSmsSent = true;
 
         await prisma.broadcastOffer.update({
           where: { id: offer.id },
